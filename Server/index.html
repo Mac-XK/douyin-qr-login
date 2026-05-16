@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>抖音远程扫码登录</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; min-height: 100vh; }
+
+.header {
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    color: #fff; padding: 20px 30px;
+    display: flex; justify-content: space-between; align-items: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+}
+.header h1 { font-size: 22px; font-weight: 600; }
+.header-right { display: flex; align-items: center; gap: 15px; }
+.device-status {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 13px; padding: 6px 14px;
+    background: rgba(255,255,255,0.1); border-radius: 20px;
+}
+.status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block;
+    animation: pulse 2s infinite;
+}
+.status-dot.online { background: #52c41a; }
+.status-dot.offline { background: #ff4d4f; animation: none; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.btn-new {
+    background: #fe2c55; color: #fff; border: none;
+    padding: 10px 24px; border-radius: 8px; font-size: 14px;
+    cursor: pointer; font-weight: 500; transition: all 0.2s;
+}
+.btn-new:hover { background: #e91e4d; transform: translateY(-1px); }
+.btn-new:disabled { background: #999; cursor: not-allowed; transform: none; }
+
+.container { max-width: 1200px; margin: 30px auto; padding: 0 20px; }
+
+.empty-state {
+    text-align: center; padding: 80px 20px; color: #999;
+}
+.empty-state svg { width: 80px; height: 80px; margin-bottom: 15px; opacity: 0.3; }
+.empty-state p { font-size: 16px; }
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.card {
+    background: #fff; border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    overflow: hidden; transition: all 0.3s;
+}
+.card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.1); transform: translateY(-2px); }
+
+.card-header {
+    padding: 14px 18px; display: flex;
+    justify-content: space-between; align-items: center;
+    border-bottom: 1px solid #f0f0f0;
+}
+.card-id { font-size: 12px; color: #999; font-family: monospace; }
+.card-badge {
+    font-size: 11px; padding: 3px 10px;
+    border-radius: 12px; font-weight: 500;
+}
+.badge-pending     { background: #e6f7ff; color: #1890ff; }
+.badge-refreshing  { background: #e6f7ff; color: #1890ff; }
+.badge-qr_loaded   { background: #e6f7ff; color: #1890ff; }
+.badge-scanned     { background: #fff7e6; color: #fa8c16; }
+.badge-success     { background: #f6ffed; color: #52c41a; }
+.badge-expired     { background: #f5f5f5; color: #999; }
+.badge-failed      { background: #fff2f0; color: #ff4d4f; }
+.badge-unknown     { background: #f5f5f5; color: #999; }
+
+.card-body { padding: 20px; text-align: center; min-height: 220px; display: flex; align-items: center; justify-content: center; flex-direction: column; }
+
+.qr-container { position: relative; display: inline-block; }
+.qr-container img {
+    width: 180px; height: 180px;
+    border-radius: 8px; border: 2px solid #f0f0f0;
+    image-rendering: pixelated;
+}
+.qr-overlay {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,0.92);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    border-radius: 8px; gap: 8px;
+}
+.qr-overlay .icon { font-size: 36px; }
+.qr-overlay .text { font-size: 13px; color: #666; font-weight: 500; }
+
+.qr-refresh-overlay {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    border-radius: 8px; gap: 10px; cursor: pointer;
+    transition: background 0.2s;
+}
+.qr-refresh-overlay:hover { background: rgba(0,0,0,0.75); }
+.qr-refresh-overlay .icon { font-size: 32px; }
+.qr-refresh-overlay .text { font-size: 14px; color: #fff; font-weight: 500; }
+
+.loading-spinner {
+    width: 40px; height: 40px;
+    border: 3px solid #f0f0f0; border-top: 3px solid #fe2c55;
+    border-radius: 50%; animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.waiting-text { color: #999; font-size: 14px; margin-top: 12px; }
+
+.card-footer {
+    padding: 12px 18px; border-top: 1px solid #f0f0f0;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.card-time { font-size: 11px; color: #ccc; }
+.card-actions { display: flex; gap: 8px; }
+
+.btn-sm {
+    border: none; padding: 6px 14px; border-radius: 6px;
+    font-size: 12px; cursor: pointer; transition: all 0.2s;
+}
+.btn-refresh { background: #e6f7ff; color: #1890ff; }
+.btn-refresh:hover { background: #bae7ff; }
+.btn-delete { background: #fff2f0; color: #ff4d4f; }
+.btn-delete:hover { background: #ffccc7; }
+</style>
+</head>
+<body>
+
+<div class="header">
+    <h1>抖音远程扫码登录</h1>
+    <div class="header-right">
+        <div class="device-status" id="deviceStatusArea">
+            <span class="status-dot offline"></span>
+            <span>设备离线</span>
+        </div>
+        <button class="btn-new" id="btnNew" onclick="createTask()">+ 新建登录</button>
+    </div>
+</div>
+
+<div class="container">
+    <div id="emptyState" class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 7h4v4H7zM13 7h4v4h-4zM7 13h4v4H7z"/>
+        </svg>
+        <p>点击「新建登录」开始扫码</p>
+    </div>
+    <div class="grid" id="taskGrid"></div>
+</div>
+
+<script>
+const API = 'api.php';
+let tasks = [];
+
+const STATUS_MAP = {
+    pending:    { label: '等待中',    badge: 'badge-pending' },
+    refreshing: { label: '刷新中',    badge: 'badge-refreshing' },
+    qr_loaded:  { label: '待扫码',    badge: 'badge-qr_loaded' },
+    scanned:    { label: '已扫码',    badge: 'badge-scanned' },
+    success:    { label: '登录成功',  badge: 'badge-success' },
+    expired:    { label: '已过期',    badge: 'badge-expired' },
+    failed:     { label: '失败',      badge: 'badge-failed' },
+};
+
+function getStatus(s) {
+    if (STATUS_MAP[s]) return STATUS_MAP[s];
+    // unknown_X 类的状态统一当过期处理（旧版插件兼容）
+    if (s && s.startsWith('unknown_')) return { label: '已过期', badge: 'badge-expired' };
+    return { label: s || '未知', badge: 'badge-unknown' };
+}
+
+// 是否显示"可扫码"状态（不需要遮罩）
+function isQRScannable(s) {
+    return s === 'qr_loaded';
+}
+
+// 是否需要刷新（过期、失败、unknown 等）
+function needsRefresh(s) {
+    return ['expired', 'failed'].includes(s) || (s && s.startsWith('unknown_'));
+}
+
+function timeAgo(ts) {
+    const diff = Math.floor(Date.now() / 1000) - ts;
+    if (diff < 60) return diff + '秒前';
+    if (diff < 3600) return Math.floor(diff / 60) + '分钟前';
+    return Math.floor(diff / 3600) + '小时前';
+}
+
+function renderTasks() {
+    const grid = document.getElementById('taskGrid');
+    const empty = document.getElementById('emptyState');
+    if (tasks.length === 0) {
+        empty.style.display = 'block';
+        grid.innerHTML = '';
+        return;
+    }
+    empty.style.display = 'none';
+
+    grid.innerHTML = tasks.map(t => {
+        const st = getStatus(t.status);
+        let bodyHTML = '';
+
+        if (t.status === 'pending' || t.status === 'refreshing') {
+            // 加载中 / 刷新中
+            bodyHTML = `
+                <div class="loading-spinner"></div>
+                <p class="waiting-text">${t.status === 'refreshing' ? '刷新中...' : '等待生成二维码...'}</p>`;
+        } else if (t.qr_image) {
+            let overlay = '';
+            if (t.status === 'scanned') {
+                overlay = `<div class="qr-overlay"><span class="icon">📱</span><span class="text">已扫码，请在手机确认</span></div>`;
+            } else if (t.status === 'success') {
+                overlay = `<div class="qr-overlay" style="background:rgba(240,255,240,0.95)"><span class="icon">✅</span><span class="text">登录成功</span></div>`;
+            } else if (needsRefresh(t.status)) {
+                // 过期/失败 -> 二维码上覆盖可点击的刷新遮罩
+                overlay = `<div class="qr-refresh-overlay" onclick="refreshQR('${t.id}')"><span class="icon">🔄</span><span class="text">二维码已过期，点击刷新</span></div>`;
+            }
+            bodyHTML = `<div class="qr-container"><img src="${t.qr_image}">${overlay}</div>`;
+        } else {
+            bodyHTML = `<p class="waiting-text">暂无二维码</p>`;
+        }
+
+        // 底部按钮：除了 pending/refreshing/success 以外都显示刷新
+        const hideRefresh = ['pending', 'refreshing', 'success'].includes(t.status);
+
+        return `
+        <div class="card">
+            <div class="card-header">
+                <span class="card-id">#${t.id}</span>
+                <span class="card-badge ${st.badge}">${st.label}</span>
+            </div>
+            <div class="card-body">${bodyHTML}</div>
+            <div class="card-footer">
+                <span class="card-time">${timeAgo(t.updated_at)}</span>
+                <div class="card-actions">
+                    ${!hideRefresh ? `<button class="btn-sm btn-refresh" onclick="refreshQR('${t.id}')">刷新</button>` : ''}
+                    <button class="btn-sm btn-delete" onclick="deleteTask('${t.id}')">删除</button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function fetchTasks() {
+    try {
+        const res = await fetch(API + '?action=get_tasks');
+        const data = await res.json();
+        if (data.code === 0) {
+            tasks = data.tasks.sort((a, b) => b.created_at - a.created_at);
+            // 更新设备状态（支持多设备）
+            const area = document.getElementById('deviceStatusArea');
+            const devices = data.devices || [];
+            const onlineDevices = devices.filter(d => d.online);
+            if (onlineDevices.length > 0) {
+                area.innerHTML = onlineDevices.map(d =>
+                    `<span class="status-dot online"></span><span>${d.device_id}</span>`
+                ).join('&nbsp;&nbsp;');
+            } else {
+                area.innerHTML = `<span class="status-dot offline"></span><span>设备离线</span>`;
+            }
+            renderTasks();
+        }
+    } catch (e) {
+        console.error('拉取任务失败:', e);
+    }
+}
+
+async function createTask() {
+    const btn = document.getElementById('btnNew');
+    btn.disabled = true;
+    try {
+        const res = await fetch(API + '?action=create_task', { method: 'POST' });
+        const data = await res.json();
+        if (data.code === 0) {
+            await fetchTasks();
+        } else {
+            alert('创建失败: ' + (data.msg || '未知错误'));
+        }
+    } catch (e) {
+        alert('请求失败: ' + e.message);
+    }
+    btn.disabled = false;
+}
+
+async function refreshQR(taskId) {
+    const fd = new FormData();
+    fd.append('task_id', taskId);
+    await fetch(API + '?action=refresh_qr', { method: 'POST', body: fd });
+    fetchTasks();
+}
+
+async function deleteTask(taskId) {
+    if (!confirm('确认删除此任务？')) return;
+    const fd = new FormData();
+    fd.append('task_id', taskId);
+    await fetch(API + '?action=delete_task', { method: 'POST', body: fd });
+    fetchTasks();
+}
+
+// 初始化 + 定时轮询
+fetchTasks();
+setInterval(fetchTasks, 2000);
+</script>
+</body>
+</html>
